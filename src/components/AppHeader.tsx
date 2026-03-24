@@ -1,57 +1,50 @@
-// src/components/AppHeader.tsx
-
 import React from "react";
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  Platform,
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { useNavigation } from "@react-navigation/native";
-
-interface Props {
-  title: string;
-  showBack?: boolean;
-  rightIcon?: string;
-  onRightPress?: () => void;
-}
 
 export default function AppHeader({
   title,
   showBack = true,
   rightIcon,
   onRightPress,
-}: Props) {
+}: any) {
+
   const navigation = useNavigation<any>();
 
   return (
     <View style={styles.container}>
-      
+
       {/* LEFT */}
-      <View style={styles.side}>
-        {showBack ? (
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Ionicons name="arrow-back" size={24} color="#000000" />
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 24 }} />
+      <TouchableOpacity
+        style={styles.side}
+        onPress={() => showBack && navigation.goBack()}
+      >
+        {showBack && (
+          <Ionicons name="arrow-back" size={24} color="#000" />
         )}
-      </View>
+      </TouchableOpacity>
 
       {/* TITLE */}
       <Text style={styles.title}>{title}</Text>
 
       {/* RIGHT */}
-      <View style={styles.side}>
-        {rightIcon ? (
-          <TouchableOpacity onPress={onRightPress}>
-            <Ionicons name={rightIcon} size={24} color="#000000" />
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 24 }} />
+      <TouchableOpacity
+        style={styles.side}
+        onPress={onRightPress}
+        activeOpacity={0.7}
+      >
+        {rightIcon && (
+          <Ionicons name={rightIcon} size={26} color="#FF7A00" />
         )}
-      </View>
+      </TouchableOpacity>
+
     </View>
   );
 }
@@ -64,17 +57,21 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     paddingHorizontal: 15,
-    elevation: 3,
+
+    elevation: 5,
+    zIndex: 999,           // 🔥 IMPORTANT
+    position: "relative",
   },
 
   title: {
     fontSize: 18,
     fontWeight: "700",
-    color: "#000000",
+    color: "#000",
   },
 
   side: {
     width: 40,
     alignItems: "center",
+    justifyContent: "center",
   },
 });

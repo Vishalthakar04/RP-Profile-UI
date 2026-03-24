@@ -152,7 +152,7 @@ export default function Dashboard() {
           {/* 🔥 Schedule Visit (ADDED NAVIGATION) */}
           <TouchableOpacity
             style={styles.quickCard}
-            onPress={() => navigation.navigate("Visits")}
+            onPress={() => navigation.navigate("VisitSchedule")}
           >
             <MaterialIcons name="event" size={28} color="#F97316" />
             <Text style={styles.quickText}>Schedule Visit</Text>

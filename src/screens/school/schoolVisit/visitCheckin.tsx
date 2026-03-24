@@ -21,7 +21,11 @@ import { WebView } from 'react-native-webview'
 import SchoolBanner from '../../../components/SchoolBanner'
 import AppHeader from '../../../components/AppHeader'
 import StepBar from '../../../components/StepBar'
-import { checkInVisit, getActiveVisit } from '../../../services/visit'
+import {
+  checkInVisit,
+  getActiveVisit,
+  saveGpsSnapshot,          // ✅ imported
+} from '../../../services/visit'
 
 export default function VisitCheckin() {
   const navigation    = useNavigation()
@@ -138,17 +142,58 @@ export default function VisitCheckin() {
     checkForActiveVisit()
   }, [])
 
+  // ── GPS Snapshot helpers ───────────────────────────────────────────────────
+  const getTimeSlot = (): '9am' | '11am' | '1pm' | '3pm' | '5pm' => {
+    const hour = new Date().getHours()
+    if (hour < 10) return '9am'
+    if (hour < 12) return '11am'
+    if (hour < 14) return '1pm'
+    if (hour < 16) return '3pm'
+    return '5pm'
+  }
+
+  /**
+   * Saves a GPS snapshot for the given visitId.
+   * Called right after a new check-in OR after the user resumes an existing visit.
+   */
+  const saveSnapshot = async (
+    visitId: string | number,
+    lat: number,
+    lng: number,
+    acc?: number,
+  ) => {
+    try {
+      const slot = getTimeSlot()
+      const res  = await saveGpsSnapshot(visitId, slot, lat, lng, acc ?? undefined)
+      if (res.success) {
+        console.log('✅ GPS Snapshot saved for slot:', slot)
+      } else {
+        console.warn('⚠️ GPS Snapshot not saved:', res.message)
+      }
+    } catch (e) {
+      console.error('❌ Snapshot error', e)
+    }
+  }
+
   // ── Resume existing visit — user explicitly chose this ────────────────────
-  const handleResume = () => {
+  const handleResume = async () => {
     if (!activeVisit?.id) return
-    setVisitId(String(activeVisit.id))   // ← store in context
+    setVisitId(String(activeVisit.id))
+
+    // Save a snapshot for the resumed visit if we have GPS coords
+    if (location) {
+      await saveSnapshot(
+        activeVisit.id,
+        location.latitude,
+        location.longitude,
+        accuracy ?? undefined,
+      )
+    }
+
     navigation.navigate('visitForm' as never, { visitId: activeVisit.id } as never)
   }
 
   // ── Start a brand new visit ───────────────────────────────────────────────
-  // Always calls the check-in API to create a new visit record.
-  // If the backend returns 409 (already has active visit), we show a dialog
-  // so the user can decide — we never silently reuse the old visit.
   const handleNewVisit = async () => {
     if (!location) { Alert.alert('No Location', 'GPS location is not available yet.'); return }
     if (!currentSchool?.id) { Alert.alert('No School', 'School information is missing.'); return }
@@ -169,9 +214,19 @@ export default function VisitCheckin() {
           [
             {
               text: 'Resume Existing',
-              onPress: () => {
-                setVisitId(String(res.data.visit_id))   // ← store in context
-                navigation.navigate('visitForm' as never, { visitId: res.data.visit_id } as never)
+              onPress: async () => {
+                const existingId = res.data.visit_id
+                setVisitId(String(existingId))
+
+                // ✅ Save snapshot for the resumed visit
+                await saveSnapshot(
+                  existingId,
+                  location.latitude,
+                  location.longitude,
+                  accuracy ?? undefined,
+                )
+
+                navigation.navigate('visitForm' as never, { visitId: existingId } as never)
               },
             },
             { text: 'Cancel', style: 'cancel' },
@@ -184,8 +239,17 @@ export default function VisitCheckin() {
     }
 
     const newVisitId = res.data?.id
-    setVisitId(String(newVisitId))   // ← store in context
+    setVisitId(String(newVisitId))
     setActiveVisit(null)
+
+    // ✅ Save snapshot immediately after successful check-in
+    await saveSnapshot(
+      newVisitId,
+      location.latitude,
+      location.longitude,
+      accuracy ?? undefined,
+    )
+
     navigation.navigate('visitForm' as never, { visitId: newVisitId } as never)
   }
 

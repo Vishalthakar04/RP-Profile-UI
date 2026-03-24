@@ -80,17 +80,20 @@ android {
 
     namespace "com.rkmission"
     defaultConfig {
-    applicationId "com.rkmission"
-    minSdkVersion rootProject.ext.minSdkVersion
-    targetSdkVersion rootProject.ext.targetSdkVersion
-    versionCode 1
-    versionName "1.0"
-    externalNativeBuild {
-    cmake {
-        arguments "-DANDROID_STL=c++_shared"
+        applicationId "com.rkmission"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+        ndk {
+            abiFilters "armeabi-v7a", "arm64-v8a", "x86_64"
+        }
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
     }
-}
-}
     signingConfigs {
         debug {
             storeFile file('debug.keystore')

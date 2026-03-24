@@ -1,7 +1,9 @@
 // src/navigation/RootNavigator.tsx
 
+import React from "react";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
-// import your screens here as we migrate them
+
+// Screens
 import Login from "../screens/auth/login";
 import VerifyOtpScreen from "../screens/auth/verifyOtp";
 import Dashboard from "../screens/dashboard/mainpage";
@@ -17,16 +19,43 @@ import SchoolDetails from "../screens/school/schoolDetails/School-Details";
 import ProgramDetails from "../screens/school/schoolDetails/programDetails";
 import SectionsManagement from "../screens/school/schoolDetails/sectionManagement";
 import ProgramsList from "../screens/school/schoolSection/programList";
-import VisitScheduleScreen from "../screens/school/scheduleVisit/scheduleVisit";
+import VisitSchedule from '../screens/school/scheduleVisit/VisitSchedule';
 import ProfileScreen from "../screens/profile/Profile";
-import  AddVisitScreen from "../screens/school/scheduleVisit/AddVisitScreen";
-const Stack = createNativeStackNavigator();
+import AddVisit from '../screens/school/scheduleVisit/AddVisit';
+
+
+// ✅ TYPES
+export type RootStackParamList = {
+  Login: undefined;
+  VerifyOtp: undefined;
+  Dashboard: undefined;
+  Schools: undefined;
+  VisitCheckin: undefined;
+  visitForm: undefined;
+  ClassObservation: undefined;
+  ObservationSummary: undefined;
+  VisitChecklist: undefined;
+  FinishVisit: undefined;
+  ModuleProgress: undefined;
+  SectionsManagement: undefined;
+  SchoolDetails: undefined;
+  ProgramDetails: undefined;
+  ProgramsList: undefined;
+  Profile: undefined;
+
+  VisitSchedule: undefined;
+  AddVisit: undefined;
+  VisitDetails: { visitId: number };
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function RootNavigator() {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }} initialRouteName="Login">
-      {/* screens will be added here page by page */}
-      {/* <Stack.Screen name="Login" component={LoginScreen} /> */}
+    <Stack.Navigator
+      screenOptions={{ headerShown: false }}
+      initialRouteName="Login"
+    >
       <Stack.Screen name="Login" component={Login} />
       <Stack.Screen name="VerifyOtp" component={VerifyOtpScreen} />
       <Stack.Screen name="Dashboard" component={Dashboard} />
@@ -43,7 +72,13 @@ export default function RootNavigator() {
       <Stack.Screen name="ProgramDetails" component={ProgramDetails} />
       <Stack.Screen name="ProgramsList" component={ProgramsList} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
-      <Stack.Screen name="Visits" component={VisitScheduleScreen} />
-<Stack.Screen name="AddVisit" component={AddVisitScreen} />    </Stack.Navigator>
+      <Stack.Screen name="AddVisit" component={AddVisit} />
+     
+      <Stack.Screen
+        name="VisitSchedule"
+        component={VisitSchedule}
+        options={{ headerShown: false }}
+      />
+    </Stack.Navigator>
   );
 }
