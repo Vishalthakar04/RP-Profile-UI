@@ -255,12 +255,12 @@ const AddVisit = () => {
           remark: remarks.trim(),
         })
         Alert.alert('Success', 'Visit updated successfully', [
-          { text: 'OK', onPress: () => navigation.goBack() }
+          { text: 'OK', onPress: () => navigation.navigate('VisitSchedule' as never) }
         ])
       } else {
         await createVisitSchedule(payload)
         Alert.alert('Success', 'Visit scheduled successfully', [
-          { text: 'OK', onPress: () => navigation.goBack() }
+          { text: 'OK', onPress: () => navigation.navigate('VisitSchedule' as never) }
         ])
       }
     } catch (e: any) {

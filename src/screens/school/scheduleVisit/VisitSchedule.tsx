@@ -36,7 +36,7 @@ const VisitSchedule = () => {
   const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
   const [schoolDropdownOpen, setSchoolDropdownOpen] = useState(false)
 
-  const statusOptions = ['All', 'Upcoming', 'Today', 'Done', 'Completed']
+  const statusOptions = ['All', 'Scheduled', 'Upcoming', 'Today', 'Done', 'Completed']
 
   const uniqueSchools = Array.from(
     new Map(
@@ -51,11 +51,23 @@ const VisitSchedule = () => {
     : uniqueSchools
 
   const filterVisit = (item: any) => {
-    const schoolValue = item.school?.name || item.school_name || ''
+    const schoolValue = item.school?.school_name || item.school?.name || item.school_name || ''
     const schoolMatch = selectedSchool === 'All' || schoolValue === selectedSchool
 
     const statusValue = (item.status || '').toString().toLowerCase()
-    const statusMatch = selectedStatus === 'All' || statusValue === selectedStatus.toLowerCase()
+    let statusMatch = selectedStatus === 'All'
+
+    if (!statusMatch) {
+      const selected = selectedStatus.toLowerCase()
+
+      if (selected === 'upcoming') {
+        statusMatch = statusValue === 'upcoming' || statusValue === 'scheduled'
+      } else if (selected === 'scheduled') {
+        statusMatch = statusValue === 'scheduled'
+      } else {
+        statusMatch = statusValue === selected
+      }
+    }
 
     return schoolMatch && statusMatch
   }
@@ -85,11 +97,14 @@ const VisitSchedule = () => {
       if (reset) {
         setAllVisits(data)
         setPage(1)
+        setHasMore(data.length < total)
       } else {
-        setAllVisits(prev => currentPage === 1 ? data : [...prev, ...data])
+        setAllVisits(prev => {
+          const next = currentPage === 1 ? data : [...prev, ...data]
+          setHasMore(next.length < total)
+          return next
+        })
       }
-
-      setHasMore(allVisits.length + data.length < total)
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to load schedules')
     } finally {
@@ -106,8 +121,11 @@ const VisitSchedule = () => {
       const res = await getVisitSchedules(nextPage, LIMIT)
       const data = res?.data?.data || res?.data || []
       const total = res?.data?.total || 0
-      setAllVisits(prev => [...prev, ...data])
-      setHasMore(allVisits.length + data.length < total)
+      setAllVisits(prev => {
+        const next = [...prev, ...data]
+        setHasMore(next.length < total)
+        return next
+      })
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed to load more')
     }
