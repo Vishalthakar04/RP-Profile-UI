@@ -322,7 +322,7 @@ const AddVisit = () => {
             <Text style={styles.placeholder}>Loading schools...</Text>
           </View>
         ) : (
-          <>
+          <View style={styles.dropdownWrapper}>
             <TouchableOpacity
               style={[styles.dropdownBox, showDropdown && styles.dropdownBoxActive]}
               onPress={() => setShowDropdown(v => !v)}
@@ -375,7 +375,7 @@ const AddVisit = () => {
                 )}
               </View>
             )}
-          </>
+          </View>
         )}
 
         <View style={styles.noteRow}>
@@ -539,10 +539,25 @@ const styles = StyleSheet.create({
   dropdownText:      { flex: 1, fontSize: 14, color: '#111827' },
   placeholder:       { color: '#9CA3AF', flex: 1, fontSize: 14 },
 
+  dropdownWrapper: {
+    position: 'relative',
+    zIndex: 100,
+  },
+
   dropdown: {
+    position: 'absolute',
+    top: 56,
+    left: 0,
+    right: 0,
     backgroundColor: '#fff', borderRadius: 12,
     borderWidth: 1, borderColor: '#E5E7EB',
-    marginTop: 6, overflow: 'hidden',
+    overflow: 'hidden',
+    elevation: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    zIndex: 9999,
   },
   searchRow: {
     flexDirection: 'row', alignItems: 'center',

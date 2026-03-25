@@ -207,7 +207,7 @@ const VisitSchedule = () => {
         style={[styles.card, { borderLeftColor: statusStyle.border }]}
       >
         <View style={styles.rowBetween}>
-          <Text style={styles.visitId}>ID: {item.id || '-'}</Text>
+          <View />
           <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
             <Text style={[styles.statusText, { color: statusStyle.text }]}>
               {item.status || 'Upcoming'}
@@ -446,10 +446,10 @@ const VisitSchedule = () => {
           ) : (
             <View style={styles.table}>
               <View style={styles.tableHeader}>
-                <Text style={[styles.th, { flex: 2 }]}>DATE</Text>
-                <Text style={[styles.th, { flex: 2 }]}>SCHOOL</Text>
-                <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>EDIT</Text>
-                <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>DEL</Text>
+                <Text style={[styles.th, { flex: 2, borderRightWidth: 1, borderRightColor: '#E5E7EB' }]}>DATE</Text>
+                <Text style={[styles.th, { flex: 2, borderRightWidth: 1, borderRightColor: '#E5E7EB' }]}>SCHOOL</Text>
+                <Text style={[styles.th, { flex: 1, textAlign: 'center', borderRightWidth: 1, borderRightColor: '#E5E7EB' }]}>EDIT</Text>
+                <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>DELETE</Text>
               </View>
 
               {filteredAllVisits.map((item: any, index: number) => (
@@ -457,14 +457,14 @@ const VisitSchedule = () => {
                   key={item.id || item._id}
                   style={[styles.tr, index % 2 === 0 && { backgroundColor: '#FAFAFA' }]}
                 >
-                  <Text style={[styles.td, { flex: 2 }]}>
+                  <Text style={[styles.td, { flex: 2, borderRightWidth: 1, borderRightColor: '#E5E7EB' }]}>
                     {formatDate(item.visit_date)}
                   </Text>
-                  <Text style={[styles.td, { flex: 2 }]} numberOfLines={1}>
+                  <Text style={[styles.td, { flex: 2, borderRightWidth: 1, borderRightColor: '#E5E7EB' }]} numberOfLines={1}>
                     {item.school?.school_name || item.school?.name || item.school_name || 'N/A'}
                   </Text>
 
-                  <View style={[styles.actionCell, { flex: 1 }]}>
+                  <View style={[styles.actionCell, { flex: 1, borderRightWidth: 1, borderRightColor: '#E5E7EB' }]}>
                     <TouchableOpacity
                       style={styles.editBtn}
                       onPress={() => navigation.navigate('AddVisit' as never, { editData: item })}
@@ -591,7 +591,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 6,
   },
-  visitId:     { color: '#FF7A00', fontSize: 12, fontWeight: '600' },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
   statusText:  { fontSize: 11, fontWeight: '700' },
   schoolName:  { fontWeight: '700', fontSize: 15, color: '#111827', marginBottom: 8 },
@@ -653,6 +652,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
     marginTop: 10,
     marginBottom: 15,
+    zIndex: 100,
   },
   filterRow: {
     flexDirection: 'row',
@@ -660,7 +660,8 @@ const styles = StyleSheet.create({
   },
   dropdownWrapper: {
     flex: 1,
-    zIndex: 10,
+    position: 'relative',
+    zIndex: 100,
   },
   dropdownButton: {
     flexDirection: 'row',
