@@ -19,10 +19,9 @@ import SchoolDetails from "../screens/school/schoolDetails/School-Details";
 import ProgramDetails from "../screens/school/schoolDetails/programDetails";
 import SectionsManagement from "../screens/school/schoolDetails/sectionManagement";
 import ProgramsList from "../screens/school/schoolSection/programList";
-import VisitSchedule from '../screens/school/scheduleVisit/VisitSchedule';
 import ProfileScreen from "../screens/profile/Profile";
+import VisitSchedule from '../screens/school/scheduleVisit/VisitSchedule';
 import AddVisit from '../screens/school/scheduleVisit/AddVisit';
-
 
 // ✅ TYPES
 export type RootStackParamList = {
@@ -44,7 +43,7 @@ export type RootStackParamList = {
   Profile: undefined;
 
   VisitSchedule: undefined;
-  AddVisit: undefined;
+  AddVisit: { editData?: any } | undefined;
   VisitDetails: { visitId: number };
 };
 
@@ -72,13 +71,12 @@ export default function RootNavigator() {
       <Stack.Screen name="ProgramDetails" component={ProgramDetails} />
       <Stack.Screen name="ProgramsList" component={ProgramsList} />
       <Stack.Screen name="Profile" component={ProfileScreen} />
-      <Stack.Screen name="AddVisit" component={AddVisit} />
-     
-      <Stack.Screen
-        name="VisitSchedule"
-        component={VisitSchedule}
-        options={{ headerShown: false }}
-      />
+      <Stack.Screen name="VisitSchedule" component={VisitSchedule} />
+       <Stack.Screen
+          name="AddVisit"
+          component={AddVisit}
+          options={{ headerShown: false }}  // since AddVisit has its own header
+        />
     </Stack.Navigator>
   );
 }

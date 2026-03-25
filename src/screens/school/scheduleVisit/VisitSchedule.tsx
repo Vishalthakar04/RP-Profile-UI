@@ -1,410 +1,714 @@
-import React, { useEffect, useState } from 'react';
+// src/screens/school/scheduleVisit/VisitSchedule.tsx
+
+import React, { useState, useCallback } from 'react'
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  SafeAreaView,
-  StatusBar,
-  ScrollView,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-
-import Ionicons from 'react-native-vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
-
-// ✅ AXIOS API FILE (IMPORTANT)
+  View, Text, StyleSheet, TouchableOpacity,
+  SafeAreaView, StatusBar, ScrollView,
+  ActivityIndicator, Alert, RefreshControl, TextInput, Modal,
+} from 'react-native'
+import Ionicons from 'react-native-vector-icons/Ionicons'
+import { useNavigation, useFocusEffect } from '@react-navigation/native'
+import AppHeader from '../../../components/AppHeader'
 import {
   getVisitSchedules,
   getUpcomingVisits,
   deleteVisitSchedule,
-} from '../../../services/schedulevisit';
+} from '../../../services/schedulevisit'
 
 const VisitSchedule = () => {
+  const navigation = useNavigation<any>()
 
-  const navigation = useNavigation<any>();
+  const [upcomingVisits, setUpcomingVisits]   = useState<any[]>([])
+  const [allVisits, setAllVisits]             = useState<any[]>([])
+  const [loadingUpcoming, setLoadingUpcoming] = useState(true)
+  const [loadingAll, setLoadingAll]           = useState(true)
+  const [refreshing, setRefreshing]           = useState(false)
+  const [deletingId, setDeletingId]           = useState<string | null>(null)
 
-  const [upcoming, setUpcoming] = useState<any[]>([]);
-  const [allVisits, setAllVisits] = useState<any[]>([]);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [page, setPage]       = useState(1)
+  const [hasMore, setHasMore] = useState(true)
+  const LIMIT = 4
 
-  // 🔥 LOAD DATA
-  const loadData = async () => {
+  // Filter states
+  const [selectedStatus, setSelectedStatus]         = useState('All')
+  const [selectedSchool, setSelectedSchool]         = useState('All')
+  const [schoolSearchText, setSchoolSearchText]     = useState('')
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false)
+  const [schoolDropdownOpen, setSchoolDropdownOpen] = useState(false)
+
+  const statusOptions = ['All', 'Upcoming', 'Today', 'Done', 'Completed']
+
+  const uniqueSchools = Array.from(
+    new Map(
+      [...upcomingVisits, ...allVisits]
+        .filter(item => item.school?.school_name || item.school?.name || item.school_name)
+        .map(item => [item.school?.school_name || item.school?.name || item.school_name, item.school?.school_name || item.school?.name || item.school_name])
+    ).values()
+  ).sort() as string[]
+
+  const filteredSchools = schoolSearchText
+    ? uniqueSchools.filter(s => s.toLowerCase().includes(schoolSearchText.toLowerCase()))
+    : uniqueSchools
+
+  const filterVisit = (item: any) => {
+    const schoolValue = item.school?.name || item.school_name || ''
+    const schoolMatch = selectedSchool === 'All' || schoolValue === selectedSchool
+
+    const statusValue = (item.status || '').toString().toLowerCase()
+    const statusMatch = selectedStatus === 'All' || statusValue === selectedStatus.toLowerCase()
+
+    return schoolMatch && statusMatch
+  }
+
+  // ── Fetch upcoming visits ───────────────────────────────────────────────
+  const fetchUpcoming = async () => {
     try {
-      setLoading(true);
+      setLoadingUpcoming(true)
+      const res = await getUpcomingVisits()
+      setUpcomingVisits(res?.data || [])
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to load upcoming visits')
+    } finally {
+      setLoadingUpcoming(false)
+    }
+  }
 
-      const upcomingRes = await getUpcomingVisits();
-      const scheduleRes = await getVisitSchedules(page, 4);
+  // ── Fetch all visits (page 1 reset) ────────────────────────────────────
+  const fetchAllVisits = async (reset = false) => {
+    try {
+      setLoadingAll(true)
+      const currentPage = reset ? 1 : page
+      const res = await getVisitSchedules(currentPage, LIMIT)
+      const data = res?.data?.data || res?.data || []
+      const total = res?.data?.total || data.length
 
-      setUpcoming(upcomingRes?.data || []);
-      setAllVisits(scheduleRes?.data || []);
-
-    } catch (error: any) {
-      console.log('API Error:', error?.response || error);
-
-      if (error?.response?.status === 401) {
-        Alert.alert("Session Expired", "Please login again");
-        navigation.navigate('Login');
+      if (reset) {
+        setAllVisits(data)
+        setPage(1)
       } else {
-        Alert.alert("Error", "Failed to load visit data");
+        setAllVisits(prev => currentPage === 1 ? data : [...prev, ...data])
       }
 
+      setHasMore(allVisits.length + data.length < total)
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to load schedules')
     } finally {
-      setLoading(false);
+      setLoadingAll(false)
     }
-  };
+  }
 
-  useEffect(() => {
-    loadData();
-  }, [page]);
+  // ── Load more (pagination) ──────────────────────────────────────────────
+  const loadMore = async () => {
+    if (!hasMore || loadingAll) return
+    const nextPage = page + 1
+    setPage(nextPage)
+    try {
+      const res = await getVisitSchedules(nextPage, LIMIT)
+      const data = res?.data?.data || res?.data || []
+      const total = res?.data?.total || 0
+      setAllVisits(prev => [...prev, ...data])
+      setHasMore(allVisits.length + data.length < total)
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to load more')
+    }
+  }
 
-  // 🔥 DELETE FUNCTION
+  // ── Pull to refresh ─────────────────────────────────────────────────────
+  const onRefresh = async () => {
+    setRefreshing(true)
+    await Promise.all([fetchUpcoming(), fetchAllVisits(true)])
+    setRefreshing(false)
+  }
+
+  // ── Re-fetch when screen comes into focus (after add/edit) ──────────────
+  useFocusEffect(
+    useCallback(() => {
+      fetchUpcoming()
+      fetchAllVisits(true)
+    }, [])
+  )
+
+  // ── Delete ──────────────────────────────────────────────────────────────
   const handleDelete = (id: string) => {
     Alert.alert(
-      "Delete",
-      "Are you sure you want to delete this visit?",
+      'Delete Visit',
+      'Are you sure you want to delete this scheduled visit?',
       [
-        { text: "Cancel", style: "cancel" },
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: "Delete",
-          style: "destructive",
+          text: 'Delete',
+          style: 'destructive',
           onPress: async () => {
             try {
-              const res = await deleteVisitSchedule(id);
-
-              if (res?.success) {
-                loadData();
-              } else {
-                Alert.alert("Error", res?.message || "Delete failed");
-              }
-
-            } catch (error) {
-              Alert.alert("Error", "Delete API failed");
+              setDeletingId(id)
+              await deleteVisitSchedule(id)
+              setAllVisits(prev => prev.filter(v => v.id !== id))
+              setUpcomingVisits(prev => prev.filter(v => v.id !== id))
+            } catch (e: any) {
+              Alert.alert('Error', e?.message || 'Delete failed')
+            } finally {
+              setDeletingId(null)
             }
           },
         },
       ]
-    );
-  };
+    )
+  }
 
-  // 🔥 CARD UI
-  const renderCard = (item: any) => (
-    <View
-      key={item._id}
-      style={[
-        styles.card,
-        { borderLeftColor: item.status === 'Today' ? 'green' : '#3A57E8' },
-      ]}
-    >
-      <View style={styles.rowBetween}>
-        <Text style={styles.id}>ID: {item.visitId || item.id || "-"}</Text>
-        <Text style={item.status === 'Today' ? styles.today : styles.upcoming}>
-          {item.status || 'Upcoming'}
+  // ── Status badge style ──────────────────────────────────────────────────
+  const getStatusStyle = (status: string) => {
+    const s = status?.toLowerCase()
+    if (s === 'today')    return { bg: '#DCFCE7', text: '#16A34A', border: '#16A34A' }
+    if (s === 'upcoming') return { bg: '#EEF2FF', text: '#3A57E8', border: '#3A57E8' }
+    if (s === 'done' || s === 'completed') return { bg: '#F3F4F6', text: '#6B7280', border: '#9CA3AF' }
+    return { bg: '#FFF3E8', text: '#FF7A00', border: '#FF7A00' }
+  }
+
+  // ── Format date ─────────────────────────────────────────────────────────
+  const formatDate = (dateStr: string) => {
+    if (!dateStr) return 'N/A'
+    const d = new Date(dateStr)
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+
+  const formatTime = (timeStr: string) => {
+    if (!timeStr) return ''
+    const [h, m] = timeStr.split(':')
+    const hour = parseInt(h)
+    const ampm = hour >= 12 ? 'PM' : 'AM'
+    const h12  = hour % 12 || 12
+    return `${h12}:${m} ${ampm}`
+  }
+
+  // ── Render upcoming card ────────────────────────────────────────────────
+  const renderCard = (item: any) => {
+    const statusStyle = getStatusStyle(item.status || 'upcoming')
+    return (
+      <View
+        key={item.id || item._id}
+        style={[styles.card, { borderLeftColor: statusStyle.border }]}
+      >
+        <View style={styles.rowBetween}>
+          <Text style={styles.visitId}>ID: {item.id || '-'}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
+            <Text style={[styles.statusText, { color: statusStyle.text }]}>
+              {item.status || 'Upcoming'}
+            </Text>
+          </View>
+        </View>
+
+        <Text style={styles.schoolName}>
+          {item.school?.school_name || item.school?.name || item.school_name || 'N/A'}
         </Text>
+
+        <View style={styles.infoRow}>
+          <Ionicons name="calendar-outline" size={13} color="#9CA3AF" />
+          <Text style={styles.infoText}>
+            {formatDate(item.visit_date)}
+            {item.visit_time ? ` • ${formatTime(item.visit_time)}` : ''}
+          </Text>
+        </View>
+
+        {item.school?.address || item.location ? (
+          <View style={styles.infoRow}>
+            <Ionicons name="location-outline" size={13} color="#9CA3AF" />
+            <Text style={styles.infoText}>
+              {item.school?.address || item.location}
+            </Text>
+          </View>
+        ) : null}
+
+        {item.remark ? (
+          <View style={styles.infoRow}>
+            <Ionicons name="chatbox-ellipses-outline" size={13} color="#9CA3AF" />
+            <Text style={styles.infoText} numberOfLines={2}>{item.remark}</Text>
+          </View>
+        ) : null}
+
+        <TouchableOpacity
+          style={styles.detailBtn}
+          onPress={() => navigation.navigate('AddVisit' as never, { editData: item })}
+        >
+          <Text style={styles.detailBtnText}>View Details</Text>
+          <Ionicons name="arrow-forward" size={14} color="#FF7A00" />
+        </TouchableOpacity>
       </View>
-
-      <Text style={styles.school}>{item.schoolName || "N/A"}</Text>
-
-      <Text style={styles.info}>
-        📅 {item.date || "-"} • {item.time || "-"}
-      </Text>
-
-      <Text style={styles.info}>
-        📍 {item.location || "-"}
-      </Text>
-
-      <TouchableOpacity style={styles.btn}>
-        <Text style={{ fontWeight: '600' }}>View Details →</Text>
-      </TouchableOpacity>
-    </View>
-  );
+    )
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
 
       {/* HEADER */}
-      <View style={styles.header}>
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Ionicons name="calendar-outline" size={22} color="#FF7A00" />
-          <Text style={styles.headerTitle}>Visit Schedule</Text>
-        </View>
-
+      <View style={styles.headerWrapper}>
+        <AppHeader 
+          title="Visit Schedule"
+          showBack={false}
+        />
         <TouchableOpacity
-          style={styles.addBtn}
-          onPress={() => navigation.navigate('AddVisit')}
+          style={styles.headerBtn}
+          activeOpacity={0.8}
+          onPress={() => navigation.navigate('AddVisit' as never)}
         >
           <Ionicons name="add" size={18} color="#fff" />
-          <Text style={styles.addText}> Add Schedule</Text>
+          <Text style={styles.headerBtnText}>Add Schedule</Text>
         </TouchableOpacity>
       </View>
 
-      {/* LOADING */}
-      {loading ? (
-        <ActivityIndicator size="large" style={{ marginTop: 50 }} />
-      ) : (
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={{ paddingBottom: 100 }}
-        >
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={['#FF7A00']}
+            tintColor="#FF7A00"
+          />
+        }
+      >
 
-          {/* FILTER */}
-          <View style={styles.filterContainer}>
-            <TouchableOpacity style={styles.filterPill}>
-              <Text style={styles.filterPillText}>Date Range</Text>
-              <Ionicons name="chevron-down" size={14} />
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.filterPill}>
-              <Text style={styles.filterPillText}>School</Text>
-              <Ionicons name="chevron-down" size={14} />
-            </TouchableOpacity>
-          </View>
-
-          {/* UPCOMING */}
-          <Text style={styles.section}>
-            Upcoming Visits <Text style={styles.sub}>(Next 30 Days)</Text>
-          </Text>
-
-          {upcoming.length === 0 ? (
-            <Text style={styles.empty}>No Upcoming Visits</Text>
-          ) : (
-            upcoming.map(renderCard)
-          )}
-
-          {/* TABLE */}
-          <Text style={styles.section}>All Scheduled Visits</Text>
-
-          <View style={styles.table}>
-            <View style={styles.tableHeader}>
-              <Text style={styles.th}>DATE</Text>
-              <Text style={styles.th}>SCHOOL</Text>
-              <Text style={styles.th}>ACTIONS</Text>
+        {/* FILTERS */}
+        <View style={styles.filtersContainer}>
+          <View style={styles.filterRow}>
+            {/* Status Dropdown */}
+            <View style={styles.dropdownWrapper}>
+              <TouchableOpacity
+                style={styles.dropdownButton}
+                onPress={() => setStatusDropdownOpen(!statusDropdownOpen)}
+              >
+                <Text style={styles.dropdownLabel}>Status</Text>
+                <Ionicons
+                  name={statusDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color="#FF7A00"
+                />
+              </TouchableOpacity>
+              {statusDropdownOpen && (
+                <View style={styles.dropdownMenu}>
+                  {statusOptions.map(status => (
+                    <TouchableOpacity
+                      key={status}
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setSelectedStatus(status)
+                        setStatusDropdownOpen(false)
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          selectedStatus === status && styles.dropdownItemActive,
+                        ]}
+                      >
+                        {status}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
             </View>
 
-            {allVisits.length === 0 ? (
-              <Text style={styles.empty}>No Visits Found</Text>
-            ) : (
-              allVisits.map((item: any) => (
-                <View key={item._id} style={styles.tr}>
+            {/* School Dropdown */}
+            <View style={styles.dropdownWrapper}>
+              <TouchableOpacity
+                style={styles.dropdownButton}
+                onPress={() => setSchoolDropdownOpen(!schoolDropdownOpen)}
+              >
+                <Text style={styles.dropdownLabel}>School</Text>
+                <Ionicons
+                  name={schoolDropdownOpen ? 'chevron-up' : 'chevron-down'}
+                  size={18}
+                  color="#FF7A00"
+                />
+              </TouchableOpacity>
+              {schoolDropdownOpen && (
+                <View style={styles.dropdownMenu}>
+                  <View style={styles.schoolSearchBox}>
+                    <Ionicons name="search" size={16} color="#9CA3AF" />
+                    <TextInput
+                      style={styles.schoolSearchInput}
+                      placeholder="Search school..."
+                      value={schoolSearchText}
+                      onChangeText={setSchoolSearchText}
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={styles.dropdownItem}
+                    onPress={() => {
+                      setSelectedSchool('All')
+                      setSchoolDropdownOpen(false)
+                      setSchoolSearchText('')
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        selectedSchool === 'All' && styles.dropdownItemActive,
+                      ]}
+                    >
+                      All Schools
+                    </Text>
+                  </TouchableOpacity>
+                  {filteredSchools.map(school => (
+                    <TouchableOpacity
+                      key={school}
+                      style={styles.dropdownItem}
+                      onPress={() => {
+                        setSelectedSchool(school)
+                        setSchoolDropdownOpen(false)
+                        setSchoolSearchText('')
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.dropdownItemText,
+                          selectedSchool === school && styles.dropdownItemActive,
+                        ]}
+                      >
+                        {school}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          </View>
+        </View>
 
-                  <Text style={styles.td}>{item.date || "-"}</Text>
+        {/* UPCOMING SECTION */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>Upcoming Visits</Text>
+          <Text style={styles.sectionSub}>Next 30 Days</Text>
+        </View>
 
-                  <Text style={styles.td}>{item.schoolName || "-"}</Text>
+        {(() => {
+          const filteredUpcoming = upcomingVisits.filter(filterVisit)
 
-                  <View style={styles.actionContainer}>
+          return loadingUpcoming ? (
+            <View style={styles.loaderBox}>
+              <ActivityIndicator color="#FF7A00" />
+            </View>
+          ) : filteredUpcoming.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Ionicons name="calendar-outline" size={36} color="#D1D5DB" />
+              <Text style={styles.emptyText}>No upcoming visits</Text>
+            </View>
+          ) : (
+            filteredUpcoming.map(renderCard)
+          )
+        })()}
 
-                    {/* EDIT */}
+        {/* ALL VISITS TABLE */}
+        <View style={styles.sectionRow}>
+          <Text style={styles.sectionTitle}>All Scheduled Visits</Text>
+        {(() => {
+            const filteredAllVisits = allVisits.filter(filterVisit)
+            return filteredAllVisits.length > 0 && (
+              <View style={styles.countBadge}>
+                <Text style={styles.countBadgeText}>{filteredAllVisits.length}</Text>
+              </View>
+            )
+          })()}
+        </View>
+
+        {(() => {
+          const filteredAllVisits = allVisits.filter(filterVisit)
+
+          return loadingAll && allVisits.length === 0 ? (
+            <View style={styles.loaderBox}>
+              <ActivityIndicator color="#FF7A00" />
+            </View>
+          ) : filteredAllVisits.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Ionicons name="document-outline" size={36} color="#D1D5DB" />
+              <Text style={styles.emptyText}>No scheduled visits</Text>
+            </View>
+          ) : (
+            <View style={styles.table}>
+              <View style={styles.tableHeader}>
+                <Text style={[styles.th, { flex: 2 }]}>DATE</Text>
+                <Text style={[styles.th, { flex: 2 }]}>SCHOOL</Text>
+                <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>EDIT</Text>
+                <Text style={[styles.th, { flex: 1, textAlign: 'center' }]}>DEL</Text>
+              </View>
+
+              {filteredAllVisits.map((item: any, index: number) => (
+                <View
+                  key={item.id || item._id}
+                  style={[styles.tr, index % 2 === 0 && { backgroundColor: '#FAFAFA' }]}
+                >
+                  <Text style={[styles.td, { flex: 2 }]}>
+                    {formatDate(item.visit_date)}
+                  </Text>
+                  <Text style={[styles.td, { flex: 2 }]} numberOfLines={1}>
+                    {item.school?.school_name || item.school?.name || item.school_name || 'N/A'}
+                  </Text>
+
+                  <View style={[styles.actionCell, { flex: 1 }]}>
                     <TouchableOpacity
                       style={styles.editBtn}
-                      onPress={() =>
-                        navigation.navigate('AddVisit', { editData: item })
-                      }
+                      onPress={() => navigation.navigate('AddVisit' as never, { editData: item })}
                     >
-                      <Ionicons name="create-outline" size={16} color="#fff" />
+                      <Ionicons name="create-outline" size={15} color="#fff" />
                     </TouchableOpacity>
-
-                    {/* DELETE */}
-                    <TouchableOpacity
-                      style={styles.deleteBtn}
-                      onPress={() => handleDelete(item._id)}
-                    >
-                      <Ionicons name="trash-outline" size={16} color="#fff" />
-                    </TouchableOpacity>
-
                   </View>
 
+                  <View style={[styles.actionCell, { flex: 1 }]}>
+                    {deletingId === (item.id || item._id) ? (
+                      <ActivityIndicator size="small" color="#EF4444" />
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.deleteBtn}
+                        onPress={() => handleDelete(item.id || item._id)}
+                      >
+                        <Ionicons name="trash-outline" size={15} color="#fff" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 </View>
-              ))
-            )}
-          </View>
+              ))}
 
-        </ScrollView>
-      )}
+              {/* LOAD MORE */}
+              {hasMore && (
+                <TouchableOpacity
+                  style={styles.loadMoreBtn}
+                  onPress={loadMore}
+                  disabled={loadingAll}
+                >
+                  {loadingAll ? (
+                    <ActivityIndicator size="small" color="#FF7A00" />
+                  ) : (
+                    <Text style={styles.loadMoreText}>Load More</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+          )
+        })()}
 
-      {/* NAVBAR */}
-      <View style={styles.navbar}>
-        <TouchableOpacity onPress={() => navigation.navigate('Dashboard')}>
-          <Ionicons name="home-outline" size={22} color="#888" />
-          <Text style={styles.navText}>HOME</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity>
-          <Ionicons name="calendar" size={22} color="#FF7A00" />
-          <Text style={styles.navTextActive}>VISITS</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => navigation.navigate('Schools')}>
-          <Ionicons name="school-outline" size={22} color="#888" />
-          <Text style={styles.navText}>SCHOOLS</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity onPress={() => navigation.navigate('Profile')}>
-          <Ionicons name="person-outline" size={22} color="#888" />
-          <Text style={styles.navText}>PROFILE</Text>
-        </TouchableOpacity>
-      </View>
-
+      </ScrollView>
     </SafeAreaView>
-  );
-};
+  )
+}
 
-export default VisitSchedule;
+export default VisitSchedule
 
 const styles = StyleSheet.create({
-
   container: { flex: 1, backgroundColor: '#F5F6FA' },
 
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 15,
+  headerWrapper: {
     backgroundColor: '#fff',
-    elevation: 10,
-    zIndex: 1000,
   },
-
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    marginLeft: 8,
-  },
-
-  addBtn: {
+  headerBtn: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#FF7A00',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    alignItems: 'center',
+    marginHorizontal: 16,
+    marginVertical: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    gap: 5,
+    alignSelf: 'flex-end',
   },
+  headerBtnText: { color: '#fff', fontWeight: '600', fontSize: 14 },
 
-  addText: { color: '#fff', fontWeight: '600' },
-
-  filterContainer: {
+  sectionRow: {
     flexDirection: 'row',
-    gap: 10,
-    paddingHorizontal: 15,
-    marginTop: 15,
-  },
-
-  filterPill: {
-    flexDirection: 'row',
-    backgroundColor: '#FFE8D6',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
     alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 20,
+    marginBottom: 10,
   },
-
-  filterPillText: {
-    color: '#FF7A00',
-    fontWeight: '600',
-    marginRight: 5,
+  sectionTitle: { fontWeight: '700', fontSize: 15, color: '#111827' },
+  sectionSub: {
+    fontSize: 12,
+    color: '#9CA3AF',
+    backgroundColor: '#F3F4F6',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
-
-  section: {
-    marginHorizontal: 15,
-    fontWeight: '700',
-    marginVertical: 10,
+  countBadge: {
+    backgroundColor: '#FF7A00',
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
+  countBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 
-  sub: { color: '#777', fontSize: 12 },
+  loaderBox: { paddingVertical: 30, alignItems: 'center' },
+  emptyBox: {
+    alignItems: 'center',
+    paddingVertical: 30,
+    gap: 8,
+    marginHorizontal: 16,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    marginBottom: 10,
+  },
+  emptyText: { color: '#9CA3AF', fontSize: 14 },
 
   card: {
     backgroundColor: '#fff',
-    marginHorizontal: 15,
+    marginHorizontal: 16,
     padding: 15,
-    borderRadius: 12,
+    borderRadius: 14,
     marginBottom: 10,
     borderLeftWidth: 4,
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
   },
-
   rowBetween: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
   },
-
-  id: { color: '#FF7A00', fontSize: 12 },
-
-  today: { color: 'green' },
-
-  upcoming: { color: '#3A57E8' },
-
-  school: { fontWeight: '700', marginVertical: 5 },
-
-  info: { fontSize: 12, color: '#666' },
-
-  btn: {
-    marginTop: 10,
-    backgroundColor: '#eee',
+  visitId:     { color: '#FF7A00', fontSize: 12, fontWeight: '600' },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 20 },
+  statusText:  { fontSize: 11, fontWeight: '700' },
+  schoolName:  { fontWeight: '700', fontSize: 15, color: '#111827', marginBottom: 8 },
+  infoRow:     { flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 4 },
+  infoText:    { fontSize: 12, color: '#6B7280', flex: 1 },
+  detailBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    marginTop: 12,
+    backgroundColor: '#FFF3E8',
     padding: 10,
     borderRadius: 8,
-    alignItems: 'center',
   },
+  detailBtnText: { color: '#FF7A00', fontWeight: '600', fontSize: 13 },
 
   table: {
-    margin: 15,
+    marginHorizontal: 16,
     backgroundColor: '#fff',
-    borderRadius: 10,
+    borderRadius: 14,
+    overflow: 'hidden',
+    elevation: 1,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    marginBottom: 10,
   },
-
   tableHeader: {
     flexDirection: 'row',
-    backgroundColor: '#eee',
-    padding: 10,
+    backgroundColor: '#F3F4F6',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
   },
-
-  th: { flex: 1, fontSize: 12, fontWeight: '700' },
-
+  th: { fontSize: 11, fontWeight: '700', color: '#6B7280', letterSpacing: 0.5 },
   tr: {
     flexDirection: 'row',
-    padding: 10,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
     borderTopWidth: 1,
-    borderColor: '#eee',
+    borderColor: '#F3F4F6',
     alignItems: 'center',
   },
+  td:         { fontSize: 12, color: '#374151' },
+  actionCell: { alignItems: 'center', justifyContent: 'center' },
+  editBtn:    { backgroundColor: '#3A57E8', padding: 7, borderRadius: 7 },
+  deleteBtn:  { backgroundColor: '#EF4444', padding: 7, borderRadius: 7 },
+  loadMoreBtn: {
+    padding: 14,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderColor: '#F3F4F6',
+  },
+  loadMoreText: { color: '#FF7A00', fontWeight: '600', fontSize: 13 },
 
-  td: { flex: 1, fontSize: 12 },
-
-  actionContainer: {
+  // Filter styles
+  filtersContainer: {
+    marginHorizontal: 16,
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  dropdownWrapper: {
     flex: 1,
+    zIndex: 10,
+  },
+  dropdownButton: {
     flexDirection: 'row',
-    gap: 8,
-  },
-
-  editBtn: {
-    backgroundColor: '#3A57E8',
-    padding: 6,
-    borderRadius: 6,
-  },
-
-  deleteBtn: {
-    backgroundColor: 'red',
-    padding: 6,
-    borderRadius: 6,
-  },
-
-  empty: {
-    textAlign: 'center',
-    color: '#999',
-    marginVertical: 20,
-  },
-
-  navbar: {
-    flexDirection: 'row',
-    height: 60,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderColor: '#eee',
-    justifyContent: 'space-around',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FB923C',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
   },
-
-  navText: { fontSize: 10, color: '#888' },
-
-  navTextActive: { fontSize: 10, color: '#FF7A00' },
-});
+  dropdownLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#FF7A00',
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: 50,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#E5E7EB',
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    maxHeight: 300,
+    zIndex: 1000,
+  },
+  dropdownItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+  },
+  dropdownItemText: {
+    fontSize: 13,
+    color: '#6B7280',
+  },
+  dropdownItemActive: {
+    color: '#FF7A00',
+    fontWeight: '700',
+  },
+  schoolSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F3F4F6',
+    backgroundColor: '#FAFAFA',
+  },
+  schoolSearchInput: {
+    flex: 1,
+    marginLeft: 8,
+    fontSize: 13,
+    color: '#111827',
+  },
+})
